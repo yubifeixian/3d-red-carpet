@@ -18,6 +18,8 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
-      }
+      },
+      // Configure resource directory as public assets
+      publicDir: 'resource'
     };
 });

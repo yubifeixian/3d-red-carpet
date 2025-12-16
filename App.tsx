@@ -5,13 +5,13 @@ import AnalysisPanel from './components/AnalysisPanel';
 import SceneContainer from './components/SceneContainer';
 
 const INITIAL_FILES: ModelFile[] = [
-  { type: ModelType.BASE, file: null, url: null },
-  { type: ModelType.IDLE, file: null, url: null },
-  { type: ModelType.WALK, file: null, url: null },
-  { type: ModelType.RUN, file: null, url: null },
-  { type: ModelType.DANCE, file: null, url: null },
-  { type: ModelType.WALL_BG, file: null, url: null },
-  { type: ModelType.WALL_FG, file: null, url: null },
+  { type: ModelType.BASE, file: null, url: '/model/schoolgirl+3d+model.fbx' },
+  { type: ModelType.IDLE, file: null, url: '/model/Idle.fbx' },
+  { type: ModelType.WALK, file: null, url: '/model/walk.fbx' },
+  { type: ModelType.RUN, file: null, url: '/model/Slow Run.fbx' },
+  { type: ModelType.DANCE, file: null, url: '/model/Belly Dance.fbx' },
+  { type: ModelType.WALL_BG, file: null, url: '/model/bgB.webp' },
+  { type: ModelType.WALL_FG, file: null, url: '/model/bgA.webp' },
 ];
 
 // --- IndexedDB Helpers ---
@@ -148,7 +148,8 @@ export default function App() {
   const getUrl = (type: ModelType) => modelFiles.find((m) => m.type === type)?.url || '';
   
   // Only check validity, don't perform heavy logic here. Base model is required.
-  const canAnalyze = !!modelFiles.find(m => m.type === ModelType.BASE)?.file;
+  // Allow using default URLs if no file is uploaded
+  const canAnalyze = !!modelFiles.find(m => m.type === ModelType.BASE)?.file || !!modelFiles.find(m => m.type === ModelType.BASE)?.url;
 
   return (
     <div className="w-full h-screen flex flex-col bg-slate-900 text-white overflow-hidden">
