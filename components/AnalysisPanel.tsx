@@ -89,8 +89,9 @@ export default function AnalysisPanel({ files, onComplete, onBack }: Props) {
         completedCount++;
         if (mounted) setProgress((completedCount / files.length) * 100);
         
-        // Artificial delay for UX
-        await new Promise(r => setTimeout(r, 400));
+        // Reduced delay on mobile for better performance
+        const delay = window.innerWidth < 768 ? 100 : 400;
+        await new Promise(r => setTimeout(r, delay));
       }
 
       if (mounted) {

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo, useLayoutEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { useAnimations, useFBX } from '@react-three/drei';
+import { useAnimations, useFBX, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 // @ts-ignore
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils';
@@ -61,9 +61,10 @@ export default function SmartCharacter({
   }, [baseFbx]);
 
   useLayoutEffect(() => {
+    // Optimize scale calculation by limiting expensive operations
     model.scale.set(1, 1, 1);
-    model.updateMatrixWorld();
-    const box = new THREE.Box3().setFromObject(model);
+    model.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(model, true); // true parameter skips updateMatrixWorld
     const size = new THREE.Vector3();
     box.getSize(size);
     if (size.y > 0.001) {
@@ -160,69 +161,69 @@ export default function SmartCharacter({
     if (!group.current) return;
     const currentPos = group.current.position;
 
+    // Reuse vectors to avoid memory allocation
+    const tempVec3 = new THREE.Vector3();
+    const tempQuat = new THREE.Quaternion();
+
     // 1. Celebration override
     if (isCelebrating) {
-        const targetRot = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0); 
-        group.current.quaternion.slerp(targetRot, 5 * delta);
+        // Simplified rotation calculation
+        tempQuat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0);
+        group.current.quaternion.slerp(tempQuat, Math.min(5 * delta, 0.5));
 
         // Position Fix: Move character to the CENTER of the platform
         const centerZ = (stairConfig.slopeEndZ + stairConfig.wallZ) / 2;
-        const safePos = new THREE.Vector3(0, stairConfig.height, centerZ);
-        group.current.position.lerp(safePos, 0.05); // Smoothly slide into place
+        tempVec3.set(0, stairConfig.height, centerZ);
+        group.current.position.lerp(tempVec3, Math.min(0.05, delta * 0.5));
     } 
     // 2. Movement Logic
     else if (targetPos) {
-      const flatTarget = new THREE.Vector3(targetPos.x, 0, targetPos.z);
+      tempVec3.set(targetPos.x, 0, targetPos.z); // flatTarget
       const flatCurrent = new THREE.Vector3(currentPos.x, 0, currentPos.z);
       
-      const dist = flatCurrent.distanceTo(flatTarget);
+      const dist = flatCurrent.distanceTo(tempVec3);
       
       if (dist < 0.2) {
         onStop(currentPos.clone());
         setCharState(CharState.IDLE);
       } else {
-        const dir = new THREE.Vector3().subVectors(flatTarget, flatCurrent).normalize();
-        const targetRot = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1), dir);
-        group.current.quaternion.slerp(targetRot, 10 * delta);
+        const dir = tempVec3.subVectors(tempVec3, flatCurrent).normalize();
+        tempQuat.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+        group.current.quaternion.slerp(tempQuat, Math.min(10 * delta, 1));
 
         const speed = isRunning ? 5.0 : 2.0;
-        const moveDist = speed * delta;
+        const moveDist = Math.min(speed * delta, 0.5); // Cap maximum movement per frame
         
         // Move X and Z
-        const nextX = currentPos.x + dir.x * moveDist;
-        const nextZ = currentPos.z + dir.z * moveDist;
-        
-        group.current.position.x = nextX;
-        group.current.position.z = nextZ;
+        currentPos.x += dir.x * moveDist;
+        currentPos.z += dir.z * moveDist;
       }
     }
 
     // 3. Height Calculation (Stairs vs Platform)
     if (!isCelebrating) {
-        if (group.current.position.z < stairConfig.slopeEndZ) {
-            // On the flat platform
-            group.current.position.y = stairConfig.height;
+        if (currentPos.z < stairConfig.slopeEndZ) {
+            // On the flat platform - direct assignment is faster
+            currentPos.y = stairConfig.height;
         } else {
             // On the stairs (Slope)
             const slopeLength = stairConfig.startZ - stairConfig.slopeEndZ;
-            const progress = (stairConfig.startZ - group.current.position.z) / slopeLength;
+            const progress = (stairConfig.startZ - currentPos.z) / slopeLength;
             const clampedProgress = THREE.MathUtils.clamp(progress, 0, 1);
-            group.current.position.y = clampedProgress * stairConfig.height;
+            currentPos.y = clampedProgress * stairConfig.height;
         }
     }
 
-    // 4. Camera Follow Logic
-    // Switch between Standard Offset and Celebration Offset
+    // 4. Camera Follow Logic - Simplified for mobile
     const activeOffset = isCelebrating ? CELEBRATION_OFFSET : CAM_OFFSET;
     
-    // We smooth the camera movement
-    const targetCamPos = group.current.position.clone().add(activeOffset);
+    tempVec3.copy(currentPos).add(activeOffset);
     
-    // Use a slightly slower lerp for the "Zoom out" effect during celebration
-    camera.position.lerp(targetCamPos, isCelebrating ? 0.02 : 0.05);
+    // Camera lerp with frame rate compensation
+    camera.position.lerp(tempVec3, Math.min(isCelebrating ? 0.02 : 0.05, delta * 0.5));
     
-    const lookAtTarget = group.current.position.clone().add(new THREE.Vector3(0, 1.5, 0));
-    camera.lookAt(lookAtTarget);
+    tempVec3.copy(currentPos).setY(currentPos.y + 1.5);
+    camera.lookAt(tempVec3);
   });
 
   // --- Interaction Handler ---

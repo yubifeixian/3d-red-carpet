@@ -1,8 +1,71 @@
-import React, { Suspense, useState, useRef, useMemo, useEffect } from 'react';
+import React, { Suspense, useState, useRef, useMemo, useEffect, Component, ErrorInfo } from 'react';
 import { Canvas, ThreeEvent, useFrame } from '@react-three/fiber';
 import { PerspectiveCamera, Environment, Loader, Sparkles, useTexture, Grid, Text, SpotLight } from '@react-three/drei';
 import * as THREE from 'three';
 import SmartCharacter from './SmartCharacter';
+
+// Loading Spinner Component
+const LoadingSpinner = ({ position }: { position: [number, number, number] }) => {
+  const meshRef = useRef<THREE.Mesh>(null);
+  useFrame((_, delta) => {
+    if (meshRef.current) {
+      meshRef.current.rotation.z += 5 * delta;
+    }
+  });
+  return (
+    <group position={position}>
+      <mesh ref={meshRef} position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[1, 0.3, 16, 32]} />
+        <meshStandardMaterial color="#ffd700" opacity={0.7} transparent />
+      </mesh>
+      <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, Math.PI]}>
+        <torusGeometry args={[1, 0.3, 16, 32]} />
+        <meshStandardMaterial color="#ffd700" opacity={0.7} transparent />
+      </mesh>
+    </group>
+  );
+};
+
+// Error Boundary Component
+class ErrorBoundary extends Component<{ children: React.ReactNode; position: [number, number, number] }, { hasError: boolean }> {
+  constructor(props: { children: React.ReactNode; position: [number, number, number] }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(_: Error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('SmartCharacter Error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <group position={this.props.position}>
+          <mesh position={[0, 0, 0]}>
+            <boxGeometry args={[2, 2, 2]} />
+            <meshStandardMaterial color="#ff4444" opacity={0.8} transparent />
+          </mesh>
+          <Text
+            fontSize={0.5}
+            position={[0, 3, 0]}
+            color="white"
+            textAlign="center"
+            anchorX="center"
+            anchorY="middle"
+          >
+            Model Loading Error
+          </Text>
+        </group>
+      );
+    }
+
+    return this.props.children;
+  }
+};
 
 interface Props {
   baseUrl: string;
@@ -47,10 +110,11 @@ const CrowdMember: React.FC<{ position: [number, number, number], color: string,
 };
 
 const Audience = () => {
-    // Generate crowd positions
+    // Generate crowd positions with reduced count for mobile
     const crowdData = useMemo(() => {
         const items: { pos: [number, number, number]; color: string; scale: number }[] = [];
-        const countPerSide = 70; 
+        // Reduce crowd size by 70% for better mobile performance
+        const countPerSide = window.innerWidth < 768 ? 20 : 70;
         
         for (let i = 0; i < countPerSide; i++) {
             // Distribute along the entire Z depth (Slope + Platform)
@@ -95,12 +159,15 @@ const PaparazziFlash = () => {
     const lightRef = useRef<THREE.PointLight>(null);
     useFrame(() => {
         if (!lightRef.current) return;
-        if (Math.random() > 0.92) { 
+        // Reduce flash frequency on mobile
+        const threshold = window.innerWidth < 768 ? 0.97 : 0.92;
+        if (Math.random() > threshold) { 
             const x = (Math.random() - 0.5) * 12; 
             const y = STAIR_HEIGHT + 2 + Math.random() * 5;
             const z = WALL_Z + 2 + (Math.random() * 8); 
             lightRef.current.position.set(x, y, z);
-            lightRef.current.intensity = 20 + Math.random() * 30; 
+            // Reduce intensity on mobile
+            lightRef.current.intensity = window.innerWidth < 768 ? 15 + Math.random() * 15 : 20 + Math.random() * 30;
         } else {
             lightRef.current.intensity *= 0.7;
         }
@@ -116,25 +183,30 @@ const CelebrationEffects = ({ active }: { active: boolean }) => {
         return obj;
     }, []);
 
+    // Reduce number of paparazzi flashes on mobile
+    const paparazziCount = window.innerWidth < 768 ? 2 : 4;
+
     return (
         <group>
             <primitive object={spotLightTarget} />
             <SpotLight
                 position={[0, 15, WALL_Z + 12]} 
                 target={spotLightTarget}
-                angle={0.3}
-                penumbra={0.4}
-                intensity={active ? 80 : 0}
+                angle={window.innerWidth < 768 ? 0.4 : 0.3}
+                penumbra={window.innerWidth < 768 ? 0.2 : 0.4}
+                intensity={active ? (window.innerWidth < 768 ? 40 : 80) : 0}
                 distance={40}
                 color="#fff"
-                castShadow
+                castShadow={window.innerWidth >= 768}
                 attenuation={5}
                 anglePower={5}
                 opacity={active ? 1 : 0}
             />
             {active && (
                 <>
-                    <PaparazziFlash /><PaparazziFlash /><PaparazziFlash /><PaparazziFlash />
+                    {[...Array(paparazziCount)].map((_, i) => (
+                        <PaparazziFlash key={i} />
+                    ))}
                 </>
             )}
         </group>
@@ -320,7 +392,12 @@ const SignatureWall = ({ signature, bgUrl, fgUrl }: { signature: string, bgUrl?:
                 </group>
             )}
 
-            <Suspense fallback={null}>
+            <Suspense fallback={
+                <mesh position={[0, CENTER_Y, Z_BG]}>
+                    <planeGeometry args={[WALL_W, WALL_H]} />
+                    <meshStandardMaterial color="#2d3748" opacity={0.5} transparent />
+                </mesh>
+            }>
                 {bgUrl && <WallLayer url={bgUrl} width={WALL_W} height={WALL_H} zOffset={Z_BG} />}
                 {fgUrl && <WallLayer url={fgUrl} width={WALL_W} height={WALL_H} transparent zOffset={Z_FG} />}
             </Suspense>
@@ -413,11 +490,23 @@ export default function SceneContainer(props: Props) {
 
   return (
     <div className="w-full h-full bg-black relative">
-      <Canvas shadows>
-        <PerspectiveCamera makeDefault position={[0, 6, 15]} fov={45} />
+      <Canvas 
+        gl={{ 
+          antialias: window.innerWidth >= 768, 
+          alpha: false,
+          powerPreference: 'high-performance' // Prioritize performance on mobile devices
+        }}
+        shadows={window.innerWidth >= 768 ? { 
+          type: THREE.PCFSoftShadowMap, 
+          radius: window.innerWidth >= 768 ? 3 : 1 
+        } : undefined}
+        dpr={Math.min(window.devicePixelRatio, window.innerWidth < 768 ? 1.5 : 2)} // Limit DPR more aggressively on mobile
+        performance={{ min: 0.1, max: 0.2 }}
+      >
+        <PerspectiveCamera makeDefault position={[0, 6, 15]} fov={window.innerWidth < 768 ? 60 : 45} />
         
         <ambientLight intensity={0.5} /> 
-        <directionalLight position={[5, 10, 10]} intensity={1.0} castShadow shadow-bias={-0.0001} />
+        <directionalLight position={[5, 10, 10]} intensity={window.innerWidth < 768 ? 0.8 : 1.0} castShadow={window.innerWidth >= 768} shadow-bias={-0.0001} />
         <pointLight position={[0, 10, WALL_Z + 5]} intensity={1} color="#ffd700" distance={20} />
         <Environment preset="night" />
 
@@ -458,20 +547,22 @@ export default function SceneContainer(props: Props) {
 
         <Sparkles count={80} scale={[10, 8, 20]} size={6} speed={0.4} opacity={0.5} color="#fff" position={[0, 4, 0]} />
 
-        <Suspense fallback={null}>
-          <SmartCharacter 
-            {...props} 
-            targetPos={targetPos}
-            isRunning={isRunning}
-            onStop={handleCharacterStop}
-            isCelebrating={isCelebrating}
-            stairConfig={{ 
-                startZ: STAIR_START_Z, 
-                slopeEndZ: SLOPE_END_Z, 
-                wallZ: WALL_Z,
-                height: STAIR_HEIGHT 
-            }}
-          />
+        <Suspense fallback={<LoadingSpinner position={[0, STAIR_HEIGHT, STAIR_START_Z]} />}>
+          <ErrorBoundary position={[0, STAIR_HEIGHT, STAIR_START_Z]}>
+            <SmartCharacter 
+              {...props} 
+              targetPos={targetPos}
+              isRunning={isRunning}
+              onStop={handleCharacterStop}
+              isCelebrating={isCelebrating}
+              stairConfig={{ 
+                  startZ: STAIR_START_Z, 
+                  slopeEndZ: SLOPE_END_Z, 
+                  wallZ: WALL_Z,
+                  height: STAIR_HEIGHT 
+              }}
+            />
+          </ErrorBoundary>
         </Suspense>
       </Canvas>
       
