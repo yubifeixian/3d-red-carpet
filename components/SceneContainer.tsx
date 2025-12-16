@@ -29,7 +29,7 @@ const CARPET_WIDTH_LIMIT = 2.2;
 // --- Decorative Components ---
 
 // 1. Crowd / Audience System
-const CrowdMember = ({ position, color, scale = 1 }: { position: [number, number, number], color: string, scale?: number }) => {
+const CrowdMember: React.FC<{ position: [number, number, number], color: string, scale?: number }> = ({ position, color, scale = 1 }) => {
     return (
         <group position={position} scale={[scale, scale, scale]}>
             {/* Body */}
@@ -49,7 +49,7 @@ const CrowdMember = ({ position, color, scale = 1 }: { position: [number, number
 const Audience = () => {
     // Generate crowd positions
     const crowdData = useMemo(() => {
-        const items = [];
+        const items: { pos: [number, number, number]; color: string; scale: number }[] = [];
         const countPerSide = 70; 
         
         for (let i = 0; i < countPerSide; i++) {
