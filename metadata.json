@@ -1,0 +1,5 @@
+{
+  "name": "Smart Model Animator",
+  "description": "An interactive 3D model viewer where the character reacts to inactivity (walking), leg touches (running), and hand touches (dancing).",
+  "requestFramePermissions": []
+}

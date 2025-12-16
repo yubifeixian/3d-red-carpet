@@ -1,0 +1,253 @@
+import React, { useEffect, useRef, useState, useMemo, useLayoutEffect } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
+import { useAnimations, useFBX } from '@react-three/drei';
+import * as THREE from 'three';
+// @ts-ignore
+import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils';
+import { CharState } from '../types';
+
+interface Props {
+  baseUrl: string;
+  idleUrl: string;
+  walkUrl: string;
+  runUrl: string;
+  danceUrl: string;
+  targetPos: THREE.Vector3 | null;
+  isRunning: boolean;
+  onStop: (finalPos: THREE.Vector3) => void;
+  isCelebrating: boolean;
+  stairConfig: { startZ: number, slopeEndZ: number, wallZ: number, height: number };
+}
+
+// Standard Camera offset (Close follow)
+const CAM_OFFSET = new THREE.Vector3(0, 3, 6);
+
+// Celebration Camera offset (Pulled back, wider view)
+// Z=16 puts camera far back. Y=5 looks down slightly.
+const CELEBRATION_OFFSET = new THREE.Vector3(0, 5, 16);
+
+export default function SmartCharacter({ 
+  baseUrl, idleUrl, walkUrl, runUrl, danceUrl, 
+  targetPos, isRunning, onStop, isCelebrating, stairConfig
+}: Props) {
+  const group = useRef<THREE.Group>(null);
+  const [charState, setCharState] = useState<CharState>(CharState.IDLE);
+  const [modelScale, setModelScale] = useState<number>(0.01);
+  const { camera } = useThree();
+
+  // --- Load Assets ---
+  const baseFbx = useFBX(baseUrl);
+  const idleFbx = useFBX(idleUrl);
+  const walkFbx = useFBX(walkUrl);
+  const runFbx = useFBX(runUrl);
+  const danceFbx = useFBX(danceUrl);
+
+  const model = useMemo(() => {
+    let clone: THREE.Object3D;
+    try {
+        // @ts-ignore
+        clone = SkeletonUtils.clone(baseFbx);
+    } catch (e) {
+        clone = baseFbx.clone();
+    }
+    clone.traverse((obj) => {
+      if ((obj as THREE.Mesh).isMesh) {
+        obj.castShadow = true;
+        obj.receiveShadow = true;
+        obj.frustumCulled = false; 
+      }
+    });
+    return clone;
+  }, [baseFbx]);
+
+  useLayoutEffect(() => {
+    model.scale.set(1, 1, 1);
+    model.updateMatrixWorld();
+    const box = new THREE.Box3().setFromObject(model);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    if (size.y > 0.001) {
+        setModelScale(1.8 / size.y);
+    }
+  }, [model]);
+
+  const animations = useMemo(() => {
+    const modelBones = new Map<string, string>(); 
+    model.traverse((obj) => {
+        if (obj.type === 'Bone') {
+            const simpleName = obj.name.replace(/^.*:/, '').toLowerCase();
+            modelBones.set(simpleName, obj.name);
+        }
+    });
+
+    const processClip = (originalClip: THREE.AnimationClip, name: string, stripPosition: boolean) => {
+        const clip = originalClip.clone();
+        clip.name = name;
+        const newTracks: THREE.KeyframeTrack[] = [];
+        const rootBoneKeywords = ['hips', 'root', 'pelvis', 'torso', 'spine'];
+
+        clip.tracks.forEach((track) => {
+            const lastDot = track.name.lastIndexOf('.');
+            const boneName = track.name.substring(0, lastDot);
+            const property = track.name.substring(lastDot + 1);
+            const simpleBoneName = boneName.replace(/^.*:/, '').toLowerCase();
+            const targetBoneName = modelBones.get(simpleBoneName);
+            const isRootBone = rootBoneKeywords.some(k => simpleBoneName.includes(k));
+
+            if (targetBoneName) {
+                if (stripPosition && isRootBone && property === 'position') {
+                    const values = track.values;
+                    const times = track.times;
+                    const newValues = new Float32Array(values.length);
+                    for (let i = 0; i < values.length; i += 3) {
+                        newValues[i] = 0;             
+                        newValues[i+1] = values[i+1]; 
+                        newValues[i+2] = 0;           
+                    }
+                    track = new THREE.VectorKeyframeTrack(`${targetBoneName}.${property}`, times as any, newValues as any);
+                } else {
+                    track.name = `${targetBoneName}.${property}`;
+                }
+                newTracks.push(track);
+            }
+        });
+        clip.tracks = newTracks;
+        return clip;
+    };
+
+    const clips: THREE.AnimationClip[] = [];
+    if (idleFbx.animations[0]) clips.push(processClip(idleFbx.animations[0], CharState.IDLE, true));
+    if (walkFbx.animations[0]) clips.push(processClip(walkFbx.animations[0], CharState.WALK, true));
+    if (runFbx.animations[0]) clips.push(processClip(runFbx.animations[0], CharState.RUN, true));
+    if (danceFbx.animations[0]) clips.push(processClip(danceFbx.animations[0], CharState.DANCE, true));
+    return clips;
+  }, [model, idleFbx, walkFbx, runFbx, danceFbx]);
+
+  const { actions } = useAnimations(animations, { current: model } as React.MutableRefObject<THREE.Object3D>);
+
+  // --- State Logic ---
+  useEffect(() => {
+    if (isCelebrating) {
+        setCharState(CharState.DANCE);
+    } else if (targetPos) {
+      setCharState(isRunning ? CharState.RUN : CharState.WALK);
+    } else {
+      // Only return to Idle if NOT dancing/celebrating
+      if (charState !== CharState.DANCE) {
+          setCharState(CharState.IDLE);
+      }
+    }
+  }, [targetPos, isRunning, charState, isCelebrating]);
+
+  // --- Animation Playing ---
+  useEffect(() => {
+    const currentAction = actions[charState];
+    const fadeDuration = 0.3;
+    
+    Object.keys(actions).forEach((key) => {
+        const act = actions[key];
+        if (act && key !== charState) act.fadeOut(fadeDuration);
+    });
+
+    if (currentAction) {
+        currentAction.reset().fadeIn(fadeDuration).play();
+        currentAction.setLoop(THREE.LoopRepeat, Infinity);
+    }
+  }, [charState, actions]);
+
+  // --- Frame Loop (Movement + Camera) ---
+  useFrame((state, delta) => {
+    if (!group.current) return;
+    const currentPos = group.current.position;
+
+    // 1. Celebration override
+    if (isCelebrating) {
+        const targetRot = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0); 
+        group.current.quaternion.slerp(targetRot, 5 * delta);
+
+        // Position Fix: Move character to the CENTER of the platform
+        const centerZ = (stairConfig.slopeEndZ + stairConfig.wallZ) / 2;
+        const safePos = new THREE.Vector3(0, stairConfig.height, centerZ);
+        group.current.position.lerp(safePos, 0.05); // Smoothly slide into place
+    } 
+    // 2. Movement Logic
+    else if (targetPos) {
+      const flatTarget = new THREE.Vector3(targetPos.x, 0, targetPos.z);
+      const flatCurrent = new THREE.Vector3(currentPos.x, 0, currentPos.z);
+      
+      const dist = flatCurrent.distanceTo(flatTarget);
+      
+      if (dist < 0.2) {
+        onStop(currentPos.clone());
+        setCharState(CharState.IDLE);
+      } else {
+        const dir = new THREE.Vector3().subVectors(flatTarget, flatCurrent).normalize();
+        const targetRot = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1), dir);
+        group.current.quaternion.slerp(targetRot, 10 * delta);
+
+        const speed = isRunning ? 5.0 : 2.0;
+        const moveDist = speed * delta;
+        
+        // Move X and Z
+        const nextX = currentPos.x + dir.x * moveDist;
+        const nextZ = currentPos.z + dir.z * moveDist;
+        
+        group.current.position.x = nextX;
+        group.current.position.z = nextZ;
+      }
+    }
+
+    // 3. Height Calculation (Stairs vs Platform)
+    if (!isCelebrating) {
+        if (group.current.position.z < stairConfig.slopeEndZ) {
+            // On the flat platform
+            group.current.position.y = stairConfig.height;
+        } else {
+            // On the stairs (Slope)
+            const slopeLength = stairConfig.startZ - stairConfig.slopeEndZ;
+            const progress = (stairConfig.startZ - group.current.position.z) / slopeLength;
+            const clampedProgress = THREE.MathUtils.clamp(progress, 0, 1);
+            group.current.position.y = clampedProgress * stairConfig.height;
+        }
+    }
+
+    // 4. Camera Follow Logic
+    // Switch between Standard Offset and Celebration Offset
+    const activeOffset = isCelebrating ? CELEBRATION_OFFSET : CAM_OFFSET;
+    
+    // We smooth the camera movement
+    const targetCamPos = group.current.position.clone().add(activeOffset);
+    
+    // Use a slightly slower lerp for the "Zoom out" effect during celebration
+    camera.position.lerp(targetCamPos, isCelebrating ? 0.02 : 0.05);
+    
+    const lookAtTarget = group.current.position.clone().add(new THREE.Vector3(0, 1.5, 0));
+    camera.lookAt(lookAtTarget);
+  });
+
+  // --- Interaction Handler ---
+  const handlePointerDown = (e: any) => {
+    e.stopPropagation(); // Stop scene click
+    
+    if (isCelebrating) return; // Ignore clicks if already finished
+
+    if (targetPos) {
+         onStop(group.current?.position.clone() || new THREE.Vector3()); // Stop moving
+         setCharState(CharState.IDLE);
+    } else {
+         // Toggle Dance
+         if (charState === CharState.DANCE) setCharState(CharState.IDLE);
+         else setCharState(CharState.DANCE);
+    }
+  };
+
+  return (
+    <group ref={group} position={[0,0, stairConfig.startZ]}>
+        <primitive 
+            object={model} 
+            scale={modelScale} 
+            onPointerDown={handlePointerDown}
+        />
+    </group>
+  );
+}
