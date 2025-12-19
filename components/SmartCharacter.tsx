@@ -6,12 +6,12 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils';
 import { CharState, ModelFormat } from '../types';
 
-// 为GLTF加载器添加配置
-useGLTF.preload('/model/schoolgirl+3d+model.glb');
-useGLTF.preload('/model/Idle.glb');
-useGLTF.preload('/model/walk.glb');
-useGLTF.preload('/model/Slow Run.glb');
-useGLTF.preload('/model/Belly Dance.glb');
+// Remove hardcoded preloads to save memory on mobile and avoid double loading
+// useGLTF.preload('/model/schoolgirl+3d+model.glb');
+// useGLTF.preload('/model/Idle.glb');
+// useGLTF.preload('/model/walk.glb');
+// useGLTF.preload('/model/Slow Run.glb');
+// useGLTF.preload('/model/Belly Dance.glb');
 
 interface Props {
   baseUrl: string;

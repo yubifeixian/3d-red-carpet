@@ -150,11 +150,15 @@ export default function App() {
   };
 
   const startSimulation = () => {
-    // Save successful configuration to memory state AND IndexedDB
-    // This runs when Analysis completes successfully
-    console.log("Saving models to cache...");
+    // Save successful configuration to memory state
     setCachedFiles(modelFiles);
-    saveToCacheDB(modelFiles);
+    
+    // Defer IDB write to avoid blocking the immediate UI transition
+    // On mobile, writing large blobs to IDB can cause jank or crashes if done synchronously with render
+    setTimeout(() => {
+        console.log("Saving models to cache...");
+        saveToCacheDB(modelFiles).catch(err => console.warn("Cache save failed:", err));
+    }, 1000);
 
     setAppState(AppState.SIMULATION);
   };

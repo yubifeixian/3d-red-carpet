@@ -499,13 +499,14 @@ export default function SceneContainer(props: Props) {
         gl={{ 
           antialias: window.innerWidth >= 768, 
           alpha: false,
-          powerPreference: 'high-performance' // Prioritize performance on mobile devices
+          powerPreference: window.innerWidth < 768 ? 'default' : 'high-performance', // Use default power on mobile to prevent context loss
+          preserveDrawingBuffer: false, // Save memory
         }}
         shadows={window.innerWidth >= 768 ? { 
           type: THREE.PCFSoftShadowMap, 
-          radius: window.innerWidth >= 768 ? 3 : 1 
-        } : undefined}
-        dpr={Math.min(window.devicePixelRatio, window.innerWidth < 768 ? 1.5 : 2)} // Limit DPR more aggressively on mobile
+          radius: 3
+        } : undefined} // Completely disable shadow map on mobile
+        dpr={Math.min(window.devicePixelRatio, window.innerWidth < 768 ? 1.0 : 2)} // Cap DPR at 1.0 on mobile for stability
         performance={{ min: 0.1, max: 0.2 }}
       >
         <PerspectiveCamera makeDefault position={[0, 6, 15]} fov={window.innerWidth < 768 ? 60 : 45} />
