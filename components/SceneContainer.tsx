@@ -497,17 +497,26 @@ export default function SceneContainer(props: Props) {
     <div className="w-full h-full bg-black relative">
       <Canvas 
         gl={{ 
-          antialias: window.innerWidth >= 768, 
+          antialias: false, // Completely disable antialias on mobile
           alpha: false,
-          powerPreference: window.innerWidth < 768 ? 'default' : 'high-performance', // Use default power on mobile to prevent context loss
-          preserveDrawingBuffer: false, // Save memory
+          powerPreference: 'default', // Never use high-performance on mobile
+          preserveDrawingBuffer: false,
+          depth: true,
+          stencil: false, // Disable stencil buffer to save memory
         }}
-        shadows={window.innerWidth >= 768 ? { 
-          type: THREE.PCFSoftShadowMap, 
-          radius: 3
-        } : undefined} // Completely disable shadow map on mobile
-        dpr={Math.min(window.devicePixelRatio, window.innerWidth < 768 ? 1.0 : 2)} // Cap DPR at 1.0 on mobile for stability
+        shadows={false} // Force disable shadows everywhere for stability first
+        dpr={window.innerWidth < 768 ? 1.0 : [1, 2]} // Strict 1.0 DPR on mobile
         performance={{ min: 0.1, max: 0.2 }}
+        onCreated={({ gl }) => {
+            // Force context loss handling
+            gl.domElement.addEventListener('webglcontextlost', (event) => {
+                event.preventDefault();
+                console.warn('WebGL Context Lost!');
+            });
+            gl.domElement.addEventListener('webglcontextrestored', () => {
+                console.log('WebGL Context Restored');
+            });
+        }}
       >
         <PerspectiveCamera makeDefault position={[0, 6, 15]} fov={window.innerWidth < 768 ? 60 : 45} />
         

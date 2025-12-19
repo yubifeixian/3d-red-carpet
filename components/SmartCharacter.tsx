@@ -108,11 +108,17 @@ export default function SmartCharacter({
         clone = baseModel.clone();
     }
     
+    // Memory Optimization: Disable shadows on mobile to save VRAM and prevent Context Lost
+    const isMobile = window.innerWidth < 768;
+
     clone.traverse((obj) => {
       if ((obj as THREE.Mesh).isMesh) {
-        obj.castShadow = true;
-        obj.receiveShadow = true;
-        obj.frustumCulled = false; 
+        obj.castShadow = !isMobile;
+        obj.receiveShadow = !isMobile;
+        obj.frustumCulled = false; // Keep this false for SkinnedMesh visibility
+        
+        // Dispose geometry/material if needed? No, React Three Fiber handles disposal.
+        // But we can simplify materials if needed.
       }
     });
     return clone;
