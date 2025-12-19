@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ModelFile, ModelType } from '../types';
+import { ModelFile, ModelType, ModelFormat } from '../types';
 
 interface Props {
   files: ModelFile[];
@@ -8,6 +8,8 @@ interface Props {
   ready: boolean;
   hasCache: boolean;
   onUseCache: () => void;
+  modelFormat: ModelFormat;
+  onModelFormatChange: (format: ModelFormat) => void;
 }
 
 const InputCard: React.FC<{
@@ -19,7 +21,11 @@ const InputCard: React.FC<{
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   accept?: string;
   icon?: string;
-}> = ({ label, description, type, file, url, onChange, accept = ".fbx", icon = "fa-cube" }) => {
+  modelFormat: ModelFormat;
+}> = ({ label, description, type, file, url, onChange, accept, icon = "fa-cube", modelFormat }) => {
+  // 根据模型格式设置默认的接受文件类型
+  const defaultAccept = modelFormat === ModelFormat.GLB ? ".glb" : ".fbx";
+  const finalAccept = accept || defaultAccept;
   // Check if we're using the default asset
   const isUsingDefault = !file && url;
   return (
@@ -38,7 +44,7 @@ const InputCard: React.FC<{
         <i className={`fa-solid ${icon} mr-2`}></i> Select
         <input 
           type="file" 
-          accept={accept}
+          accept={finalAccept}
           className="hidden" 
           onChange={onChange}
         />
@@ -48,7 +54,7 @@ const InputCard: React.FC<{
   );
 };
 
-export default function UploadPanel({ files, onFileChange, onProceed, ready, hasCache, onUseCache }: Props) {
+export default function UploadPanel({ files, onFileChange, onProceed, ready, hasCache, onUseCache, modelFormat, onModelFormatChange }: Props) {
   const [showCacheModal, setShowCacheModal] = useState(false);
   
   const getFile = (type: ModelType) => files.find(f => f.type === type)?.file || null;
@@ -77,15 +83,37 @@ export default function UploadPanel({ files, onFileChange, onProceed, ready, has
       <div className="text-center mb-8">
         <h2 className="text-3xl font-bold mb-2">Upload Assets</h2>
         <p className="text-slate-400">
-          Upload character FBX files and optional Wall images (.webp/.png) to customize the scene.
+          Upload character {modelFormat.toUpperCase()} files and optional Wall images (.webp/.png) to customize the scene.
           <span className="block mt-2 text-sm text-blue-400">💡 Tip: Default assets are already loaded. You can upload custom files or proceed directly!</span>
         </p>
+        
+        {/* 模型格式选择按钮组 */}
+        <div className="flex justify-center gap-2 mt-4">
+          <button
+            onClick={() => onModelFormatChange(ModelFormat.GLB)}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${modelFormat === ModelFormat.GLB
+              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20'
+              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+          >
+            <i className="fa-solid fa-file-import mr-1"></i> GLB
+          </button>
+          <button
+            onClick={() => onModelFormatChange(ModelFormat.FBX)}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${modelFormat === ModelFormat.FBX
+              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20'
+              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+          >
+            <i className="fa-solid fa-file-import mr-1"></i> FBX
+          </button>
+        </div>
       </div>
 
       <div className="space-y-6">
         {/* Models Section */}
         <div>
-            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">Character Models (FBX)</h3>
+            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">Character Models ({modelFormat.toUpperCase()})</h3>
             <div className="grid gap-3">
                 <InputCard 
                 label="Base Model (Mesh)" 
@@ -94,6 +122,7 @@ export default function UploadPanel({ files, onFileChange, onProceed, ready, has
                 file={getFile(ModelType.BASE)}
                 url={getUrl(ModelType.BASE)}
                 onChange={(e) => e.target.files?.[0] && onFileChange(ModelType.BASE, e.target.files[0])}
+                modelFormat={modelFormat}
                 />
                 <InputCard 
                 label="Idle Animation" 
@@ -102,6 +131,7 @@ export default function UploadPanel({ files, onFileChange, onProceed, ready, has
                 file={getFile(ModelType.IDLE)}
                 url={getUrl(ModelType.IDLE)}
                 onChange={(e) => e.target.files?.[0] && onFileChange(ModelType.IDLE, e.target.files[0])}
+                modelFormat={modelFormat}
                 />
                 <InputCard 
                 label="Walk Animation" 
@@ -110,6 +140,7 @@ export default function UploadPanel({ files, onFileChange, onProceed, ready, has
                 file={getFile(ModelType.WALK)}
                 url={getUrl(ModelType.WALK)}
                 onChange={(e) => e.target.files?.[0] && onFileChange(ModelType.WALK, e.target.files[0])}
+                modelFormat={modelFormat}
                 />
                 <InputCard 
                 label="Run Animation" 
@@ -118,6 +149,7 @@ export default function UploadPanel({ files, onFileChange, onProceed, ready, has
                 file={getFile(ModelType.RUN)}
                 url={getUrl(ModelType.RUN)}
                 onChange={(e) => e.target.files?.[0] && onFileChange(ModelType.RUN, e.target.files[0])}
+                modelFormat={modelFormat}
                 />
                 <InputCard 
                 label="Dance Animation" 
@@ -126,6 +158,7 @@ export default function UploadPanel({ files, onFileChange, onProceed, ready, has
                 file={getFile(ModelType.DANCE)}
                 url={getUrl(ModelType.DANCE)}
                 onChange={(e) => e.target.files?.[0] && onFileChange(ModelType.DANCE, e.target.files[0])}
+                modelFormat={modelFormat}
                 />
             </div>
         </div>
@@ -143,6 +176,7 @@ export default function UploadPanel({ files, onFileChange, onProceed, ready, has
                 onChange={(e) => e.target.files?.[0] && onFileChange(ModelType.WALL_BG, e.target.files[0])}
                 accept="image/webp, image/png, image/jpeg"
                 icon="fa-image"
+                modelFormat={modelFormat}
                 />
                 <InputCard 
                 label="Wall Foreground (Image A)" 
@@ -153,6 +187,7 @@ export default function UploadPanel({ files, onFileChange, onProceed, ready, has
                 onChange={(e) => e.target.files?.[0] && onFileChange(ModelType.WALL_FG, e.target.files[0])}
                 accept="image/webp, image/png, image/jpeg"
                 icon="fa-layer-group"
+                modelFormat={modelFormat}
                 />
             </div>
         </div>

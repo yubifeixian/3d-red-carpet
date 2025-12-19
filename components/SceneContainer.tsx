@@ -67,6 +67,10 @@ class ErrorBoundary extends Component<{ children: React.ReactNode; position: [nu
   }
 };
 
+import { ModelFormat } from '../types';
+
+// ... existing imports
+
 interface Props {
   baseUrl: string;
   idleUrl: string;
@@ -75,6 +79,7 @@ interface Props {
   danceUrl: string;
   wallBgUrl?: string;
   wallFgUrl?: string;
+  modelFormat: ModelFormat;
 }
 
 // Scene Geometry Configuration

@@ -1,18 +1,30 @@
-import React, { useState, useEffect } from 'react';
-import { AppState, ModelType, ModelFile } from './types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { AppState, ModelType, ModelFile, ModelFormat } from './types';
 import UploadPanel from './components/UploadPanel';
 import AnalysisPanel from './components/AnalysisPanel';
 import SceneContainer from './components/SceneContainer';
 
-const INITIAL_FILES: ModelFile[] = [
-  { type: ModelType.BASE, file: null, url: '/model/schoolgirl+3d+model.fbx' },
-  { type: ModelType.IDLE, file: null, url: '/model/Idle.fbx' },
-  { type: ModelType.WALK, file: null, url: '/model/walk.fbx' },
-  { type: ModelType.RUN, file: null, url: '/model/Slow Run.fbx' },
-  { type: ModelType.DANCE, file: null, url: '/model/Belly Dance.fbx' },
-  { type: ModelType.WALL_BG, file: null, url: '/model/bgB.webp' },
-  { type: ModelType.WALL_FG, file: null, url: '/model/bgA.webp' },
-];
+// 默认模型文件配置，按格式分类
+const DEFAULT_MODEL_FILES = {
+  [ModelFormat.GLB]: [
+    { type: ModelType.BASE, file: null, url: '/model/schoolgirl+3d+model.glb' },
+    { type: ModelType.IDLE, file: null, url: '/model/Idle.glb' },
+    { type: ModelType.WALK, file: null, url: '/model/walk.glb' },
+    { type: ModelType.RUN, file: null, url: '/model/Slow Run.glb' },
+    { type: ModelType.DANCE, file: null, url: '/model/Belly Dance.glb' },
+    { type: ModelType.WALL_BG, file: null, url: '/model/bgB.webp' },
+    { type: ModelType.WALL_FG, file: null, url: '/model/bgA.webp' },
+  ],
+  [ModelFormat.FBX]: [
+    { type: ModelType.BASE, file: null, url: '/model/schoolgirl+3d+model.fbx' },
+    { type: ModelType.IDLE, file: null, url: '/model/Idle.fbx' },
+    { type: ModelType.WALK, file: null, url: '/model/walk.fbx' },
+    { type: ModelType.RUN, file: null, url: '/model/Slow Run.fbx' },
+    { type: ModelType.DANCE, file: null, url: '/model/Belly Dance.fbx' },
+    { type: ModelType.WALL_BG, file: null, url: '/model/bgB.webp' },
+    { type: ModelType.WALL_FG, file: null, url: '/model/bgA.webp' },
+  ]
+};
 
 // --- IndexedDB Helpers ---
 const DB_NAME = 'SmartAnimatorDB';
@@ -97,10 +109,21 @@ const loadFromCacheDB = async (): Promise<ModelFile[] | null> => {
 
 export default function App() {
   const [appState, setAppState] = useState<AppState>(AppState.UPLOAD);
-  const [modelFiles, setModelFiles] = useState<ModelFile[]>(INITIAL_FILES);
+  const [modelFormat, setModelFormat] = useState<ModelFormat>(ModelFormat.GLB);
+  
+  // 根据选择的模型格式获取默认文件配置
+  const initialFiles = useMemo(() => DEFAULT_MODEL_FILES[modelFormat], [modelFormat]);
+  
+  // 只有在模型格式改变时才重置模型文件
+  const [modelFiles, setModelFiles] = useState<ModelFile[]>(initialFiles);
   
   // Cache for the last successfully loaded set of files
   const [cachedFiles, setCachedFiles] = useState<ModelFile[] | null>(null);
+  
+  // 当模型格式改变时，重置模型文件为对应格式的默认文件
+  useEffect(() => {
+    setModelFiles(DEFAULT_MODEL_FILES[modelFormat]);
+  }, [modelFormat]);
 
   // Load cache on mount
   useEffect(() => {
@@ -138,7 +161,7 @@ export default function App() {
 
   const reset = () => {
     setAppState(AppState.UPLOAD);
-    setModelFiles(INITIAL_FILES);
+    setModelFiles(DEFAULT_MODEL_FILES[modelFormat]);
     // Reload cache from DB ensures we have fresh URLs if needed, 
     // though memory state is usually fine. 
     // We do NOT clear cachedFiles here.
@@ -186,6 +209,8 @@ export default function App() {
               ready={canAnalyze}
               hasCache={!!cachedFiles}
               onUseCache={handleUseCache}
+              modelFormat={modelFormat}
+              onModelFormatChange={setModelFormat}
             />
           </div>
         )}
@@ -210,6 +235,7 @@ export default function App() {
                 danceUrl={getUrl(ModelType.DANCE)}
                 wallBgUrl={getUrl(ModelType.WALL_BG)}
                 wallFgUrl={getUrl(ModelType.WALL_FG)}
+                modelFormat={modelFormat}
              />
           </div>
         )}

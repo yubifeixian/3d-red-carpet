@@ -37,6 +37,11 @@ export enum CharState {
   DANCE = 'DANCE',
 }
 
+export enum ModelFormat {
+  GLB = 'glb',
+  FBX = 'fbx',
+}
+
 export interface AnimationSet {
   idle: AnimationClip | null;
   walk: AnimationClip | null;

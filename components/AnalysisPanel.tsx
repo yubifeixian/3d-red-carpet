@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { ModelFile, ModelType } from '../types';
 
 interface Props {
@@ -22,7 +23,21 @@ export default function AnalysisPanel({ files, onComplete, onBack }: Props) {
 
   useEffect(() => {
     let mounted = true;
-    const loader = new FBXLoader();
+    const fbxLoader = new FBXLoader();
+    const gltfLoader = new GLTFLoader();
+
+    // Helper function to determine model format from URL or File
+    const getModelFormat = (url: string, file?: File) => {
+      if (file) {
+          const name = file.name.toLowerCase();
+          if (name.endsWith('.glb')) return 'glb';
+          if (name.endsWith('.fbx')) return 'fbx';
+      }
+      const lowerUrl = url.toLowerCase();
+      if (lowerUrl.endsWith('.glb')) return 'glb';
+      if (lowerUrl.endsWith('.fbx')) return 'fbx';
+      return 'unknown';
+    };
 
     const analyzeFiles = async () => {
       let completedCount = 0;
@@ -38,30 +53,60 @@ export default function AnalysisPanel({ files, onComplete, onBack }: Props) {
         ));
 
         try {
-           if (file.url) {
-             // Handle Images (Wall Backgrounds) differently from FBX
+           // Determine if we're using a URL or an uploaded file
+           const useUrl = !!file.url;
+           const useUploadedFile = !!file.file;
+           
+           if (useUrl || useUploadedFile) {
+             // Handle Images (Wall Backgrounds) differently from 3D models
              if (file.type === ModelType.WALL_BG || file.type === ModelType.WALL_FG) {
-                // Just assume images are valid if the URL exists
+                // Just assume images are valid if URL or file exists
                 if (mounted) {
                     setItems(prev => prev.map((item, idx) => 
                         idx === i ? { ...item, status: 'complete', details: 'Image Loaded' } : item
                     ));
                 }
              } else {
-                 // Handle FBX
-                 const object = await loader.loadAsync(file.url);
+                 // Handle 3D models based on their format
+                 let modelUrl;
+                 
+                 if (useUrl) {
+                     modelUrl = file.url!;
+                 } else {
+                     // Create a temporary URL for the uploaded file
+                     modelUrl = URL.createObjectURL(file.file!);
+                 }
+                 
+                 const modelFormat = getModelFormat(modelUrl, file.file || undefined);
+                 let object;
+                 
+                 if (modelFormat === 'glb') {
+                    // Handle GLB
+                    const gltf = await gltfLoader.loadAsync(modelUrl);
+                    object = gltf.scene;
+                 } else if (modelFormat === 'fbx') {
+                    // Handle FBX
+                    object = await fbxLoader.loadAsync(modelUrl);
+                 } else {
+                    throw new Error('Unsupported model format');
+                 }
+                 
+                 // Clean up temporary URL ONLY if we created one (i.e., we didn't use an existing URL)
+                 if (!useUrl && useUploadedFile) {
+                     URL.revokeObjectURL(modelUrl);
+                 }
                  
                  let details = "";
-                 if (object.animations && object.animations.length > 0) {
-                    const duration = object.animations[0].duration.toFixed(2);
+                 if ((object as any).animations && (object as any).animations.length > 0) {
+                    const duration = (object as any).animations[0].duration.toFixed(2);
                     details = `Animation Duration: ${duration}s`;
                  } else {
                     let boneCount = 0;
-                    object.traverse((child) => {
+                    object.traverse((child: any) => {
                         if (child.type === 'Bone') boneCount++;
                     });
                     details = `Skeleton found: ${boneCount} bones`;
-                 }
+                }
     
                  if (mounted) {
                     setItems(prev => prev.map((item, idx) => 
