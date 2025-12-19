@@ -417,7 +417,35 @@ const SignatureWall = ({ signature, bgUrl, fgUrl }: { signature: string, bgUrl?:
     )
 }
 
+// Safe Environment Component that handles loading errors
+class SafeEnvironment extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.warn("Environment loading failed, falling back to basic lighting:", error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <color attach="background" args={['#111']} />;
+    }
+    return this.props.children;
+  }
+}
+
 export default function SceneContainer(props: Props) {
+  // Debug log to confirm mount
+  useEffect(() => {
+      console.log("SceneContainer mounted. Initializing Canvas...");
+  }, []);
+
   const [targetPos, setTargetPos] = useState<THREE.Vector3 | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [showInput, setShowInput] = useState(false);
@@ -523,7 +551,12 @@ export default function SceneContainer(props: Props) {
         <ambientLight intensity={0.5} /> 
         <directionalLight position={[5, 10, 10]} intensity={window.innerWidth < 768 ? 0.8 : 1.0} castShadow={window.innerWidth >= 768} shadow-bias={-0.0001} />
         <pointLight position={[0, 10, WALL_Z + 5]} intensity={1} color="#ffd700" distance={20} />
-        <Environment preset="night" />
+        
+        <Suspense fallback={null}>
+            <SafeEnvironment>
+                <Environment preset="night" />
+            </SafeEnvironment>
+        </Suspense>
 
         <Staircase />
         <Audience />
