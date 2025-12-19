@@ -26,6 +26,39 @@ const LoadingSpinner = ({ position }: { position: [number, number, number] }) =>
   );
 };
 
+// Guide Cursor Component
+const GuideCursor = ({ position }: { position: [number, number, number] }) => {
+    const ref = useRef<THREE.Group>(null);
+    useFrame((state) => {
+        if (ref.current) {
+            // Bounce
+            ref.current.position.y = position[1] + Math.sin(state.clock.elapsedTime * 4) * 0.2;
+            // Rotate
+            ref.current.rotation.y += 0.02;
+        }
+    });
+
+    return (
+        <group ref={ref} position={position}>
+             {/* Arrow */}
+            <mesh position={[0, 1, 0]} castShadow>
+                <coneGeometry args={[0.3, 0.8, 16]} />
+                <meshStandardMaterial color="#fbbf24" emissive="#fbbf24" emissiveIntensity={0.5} />
+            </mesh>
+            {/* Ring */}
+            <mesh position={[0, 0.2, 0]} rotation={[-Math.PI/2, 0, 0]}>
+                <torusGeometry args={[0.5, 0.05, 16, 32]} />
+                <meshStandardMaterial color="#fbbf24" emissive="#fbbf24" emissiveIntensity={0.5} />
+            </mesh>
+            {/* Ground Glow */}
+            <mesh position={[0, 0.05, 0]} rotation={[-Math.PI/2, 0, 0]}>
+                 <circleGeometry args={[0.8, 32]} />
+                 <meshBasicMaterial color="#fbbf24" transparent opacity={0.3} />
+            </mesh>
+        </group>
+    );
+};
+
 // Error Boundary Component
 class ErrorBoundary extends Component<{ children: React.ReactNode; position: [number, number, number] }, { hasError: boolean }> {
   constructor(props: { children: React.ReactNode; position: [number, number, number] }) {
@@ -411,7 +444,7 @@ const SignatureWall = ({ signature, bgUrl, fgUrl }: { signature: string, bgUrl?:
                 fontSize={0.85} maxWidth={WALL_W - 2} lineHeight={1} letterSpacing={0.05} textAlign="center" anchorX="center" anchorY="middle"
                 position={[0, -1.35, Z_TEXT]} color={signature ? "#FFD700" : "rgba(255,255,255,0.5)"} outlineWidth={signature ? 0.04 : 0} outlineColor="#000000"
             >
-                {signature || "AWAITING STAR"}
+                {signature || "请来此签名"}
             </Text>
         </group>
     )
@@ -466,10 +499,177 @@ export default function SceneContainer(props: Props) {
       return point;
   }
 
+  const [guideStep, setGuideStep] = useState(0); // 0: Start, 1: Middle Reached, 2: Done
+
+  const handleCharacterUpdate = (pos: THREE.Vector3) => {
+      // Step 0: Target is Middle of Slope (Z approx 2)
+      if (guideStep === 0) {
+          if (pos.z <= 3.0) { // Give some buffer, target is ~2
+              setGuideStep(1);
+          }
+      }
+      // Step 1: Target is Platform (Z approx -8)
+      else if (guideStep === 1) {
+          if (pos.z <= -2.0) { // Slope ends at -4. Reaching -2 is close enough to trigger next phase
+              setGuideStep(2);
+          }
+      }
+  };
+
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareImageUrl, setShareImageUrl] = useState<string | null>(null);
+  
+  // Animation State for Share Button Guide
+  const [shareBtnState, setShareBtnState] = useState<'hidden' | 'center' | 'corner'>('hidden');
+  const [showGuideOverlay, setShowGuideOverlay] = useState(false);
+
+  useEffect(() => {
+    if (isCelebrating) {
+      // Step 1: Show in center with overlay
+      setShareBtnState('center');
+      setShowGuideOverlay(true);
+
+      // Step 2: Move to corner after delay
+      const moveTimer = setTimeout(() => {
+        setShareBtnState('corner');
+      }, 1500); 
+
+      // Step 3: Remove overlay after moving
+      const overlayTimer = setTimeout(() => {
+        setShowGuideOverlay(false);
+      }, 2000); 
+
+      return () => {
+        clearTimeout(moveTimer);
+        clearTimeout(overlayTimer);
+      };
+    } else {
+        setShareBtnState('hidden');
+        setShowGuideOverlay(false);
+    }
+  }, [isCelebrating]);
+
+  // Function to generate the shareable image
+  const generateShareImage = async () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Set resolution (2:1 aspect ratio to match wall)
+      const width = 1400;
+      const height = 700; 
+      canvas.width = width;
+      canvas.height = height;
+
+      // Draw Background
+      try {
+          // If custom bg provided, use it
+          if (props.wallBgUrl) {
+              const img = new Image();
+              img.crossOrigin = "anonymous";
+              await new Promise((resolve, reject) => {
+                  img.onload = resolve;
+                  img.onerror = reject;
+                  img.src = props.wallBgUrl!;
+              });
+              ctx.drawImage(img, 0, 0, width, height);
+          } else {
+              // Default Gradient Background
+              const gradient = ctx.createLinearGradient(0, 0, 0, height);
+              gradient.addColorStop(0, "#1e293b");
+              gradient.addColorStop(1, "#0f172a");
+              ctx.fillStyle = gradient;
+              ctx.fillRect(0, 0, width, height);
+              
+              // Draw Grid lines
+              ctx.strokeStyle = "#334155";
+              ctx.lineWidth = 2;
+              const cellSize = 100;
+              for(let x=0; x<=width; x+=cellSize) {
+                  ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,height); ctx.stroke();
+              }
+              for(let y=0; y<=height; y+=cellSize) {
+                  ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(width,y); ctx.stroke();
+              }
+          }
+
+          // If custom FG provided, draw it
+          if (props.wallFgUrl) {
+               const img = new Image();
+               img.crossOrigin = "anonymous";
+               await new Promise((resolve, reject) => {
+                   img.onload = resolve;
+                   img.onerror = () => resolve(null); // Ignore FG error
+                   img.src = props.wallFgUrl!;
+               });
+               ctx.drawImage(img, 0, 0, width, height);
+          }
+
+          // Draw Signature Text
+          ctx.fillStyle = "#FFD700"; // Gold
+          ctx.font = "bold 80px sans-serif"; // Reduced font size slightly to fit better
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          // Text Shadow
+          ctx.shadowColor = "rgba(0,0,0,0.8)";
+          ctx.shadowBlur = 15;
+          ctx.shadowOffsetX = 4;
+          ctx.shadowOffsetY = 4;
+          
+          // Move text down to the lower third (approx 70% of height) to match the red box in the user's screenshot
+          const textY = height * 0.7; 
+          ctx.fillText(signature || "来疯2025", width / 2, textY);
+          
+          // Draw Watermark
+          ctx.font = "bold 24px sans-serif"; // Smaller watermark
+          ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+          ctx.fillText("来疯2025年终盛典 · 独家留念", width / 2, height - 30);
+
+          const dataUrl = canvas.toDataURL('image/png');
+          setShareImageUrl(dataUrl);
+          setShowShareModal(true);
+
+      } catch (e) {
+          console.error("Failed to generate image", e);
+          alert("生成图片失败，请稍后重试");
+      }
+  };
+
+  const handleShareFile = async () => {
+    if (!shareImageUrl) return;
+    
+    try {
+        const blob = await (await fetch(shareImageUrl)).blob();
+        const file = new File([blob], "laifeng_2025_signature.png", { type: "image/png" });
+        
+        if (navigator.share && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+                files: [file],
+                title: '我的签名墙',
+                text: '我在来疯2025年终盛典留下了签名，快来看看！'
+            });
+        } else {
+            // Fallback: Just tell user to long press
+            alert("请长按图片保存分享");
+        }
+    } catch (error) {
+        console.error("Error sharing:", error);
+        alert("分享失败，请长按图片保存");
+    }
+  };
+
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
+
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
-    if (showInput || isCelebrating) return; 
+    if (showInput || isCelebrating || showShareModal) return; 
     e.stopPropagation();
     isPointerDown.current = true;
+    
+    // Hide guide text on first interaction
+    if (!hasUserInteracted) setHasUserInteracted(true);
     
     const point = getRestrictedPoint(e);
     setTargetPos(point);
@@ -482,7 +682,7 @@ export default function SceneContainer(props: Props) {
   };
 
   const handlePointerMove = (e: ThreeEvent<PointerEvent>) => {
-    if (isPointerDown.current && !showInput && !isCelebrating) {
+    if (isPointerDown.current && !showInput && !isCelebrating && !showShareModal) {
         const point = getRestrictedPoint(e);
         setTargetPos(point);
     }
@@ -603,6 +803,7 @@ export default function SceneContainer(props: Props) {
               targetPos={targetPos}
               isRunning={isRunning}
               onStop={handleCharacterStop}
+              onUpdate={handleCharacterUpdate}
               isCelebrating={isCelebrating}
               stairConfig={{ 
                   startZ: STAIR_START_Z, 
@@ -613,7 +814,104 @@ export default function SceneContainer(props: Props) {
             />
           </ErrorBoundary>
         </Suspense>
+
+        {/* Guide Cursor */}
+        {guideStep === 0 && !isCelebrating && !showInput && (
+             <GuideCursor position={[0, STAIR_HEIGHT/2, 2]} />
+        )}
+        {guideStep === 1 && !isCelebrating && !showInput && (
+             <GuideCursor position={[0, STAIR_HEIGHT, -5]} />
+        )}
+
       </Canvas>
+      
+      {/* Guide Overlay Text */}
+      {guideStep < 2 && !isCelebrating && !showInput && !hasUserInteracted && (
+          <div className="absolute top-1/4 left-0 w-full text-center pointer-events-none z-20 animate-pulse">
+              <div className="inline-block bg-black/50 backdrop-blur-md text-white px-6 py-3 rounded-full border border-yellow-500/50 shadow-lg">
+                  <div className="flex items-center gap-3">
+                      <div className="w-6 h-6 rounded-full bg-yellow-500 flex items-center justify-center text-black font-bold text-xs animate-bounce">
+                          👆
+                      </div>
+                      <span className="font-bold tracking-wide">点击屏幕，移动人物</span>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Guide Overlay */}
+      {showGuideOverlay && (
+          <div className="absolute inset-0 bg-black/60 z-30 transition-opacity duration-500 pointer-events-none" />
+      )}
+
+      {/* Screenshot Share Button */}
+      {isCelebrating && !showShareModal && (
+        <div 
+            className={`absolute z-40 transition-all duration-700 ease-in-out ${
+                shareBtnState === 'center' 
+                    ? 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 scale-150' 
+                    : 'top-4 right-4 scale-100'
+            }`}
+        >
+           <div className="relative group">
+             {/* Ping animation to attract attention - only active in corner or after initial delay */}
+             <div className={`absolute -inset-0.5 bg-yellow-500 rounded-full opacity-50 animate-ping duration-[3s] ${shareBtnState === 'center' ? 'hidden' : ''}`}></div>
+             
+             {/* Glow effect when in center */}
+             {shareBtnState === 'center' && (
+                 <div className="absolute -inset-4 bg-yellow-500/30 rounded-full blur-xl animate-pulse"></div>
+             )}
+
+             <button
+               onClick={generateShareImage}
+               className="relative bg-black/60 backdrop-blur-md border border-yellow-500 text-yellow-500 px-5 py-2.5 rounded-full flex items-center gap-2 hover:bg-yellow-500 hover:text-black transition-all shadow-[0_0_20px_rgba(234,179,8,0.3)]"
+             >
+               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 animate-bounce">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+               </svg>
+               <span className="font-bold tracking-wide">截图分享</span>
+             </button>
+             
+             {/* Tooltip hint - Always visible in center mode */}
+             <div className={`absolute right-0 top-full mt-2 w-max bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded transition-opacity pointer-events-none ${shareBtnState === 'center' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                保存你的专属时刻
+             </div>
+           </div>
+        </div>
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && shareImageUrl && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm z-50 animate-in zoom-in-95" onClick={() => setShowShareModal(false)}>
+              <div className="relative bg-slate-900 p-4 rounded-xl max-w-lg w-full m-4 border border-slate-700 shadow-2xl" onClick={e => e.stopPropagation()}>
+                  <button 
+                    onClick={() => setShowShareModal(false)}
+                    className="absolute -top-3 -right-3 bg-slate-700 text-white rounded-full p-1 hover:bg-slate-600 border-2 border-slate-900 z-10"
+                  >
+                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                     </svg>
+                  </button>
+                  
+                  <div className="text-center mb-4">
+                      <h3 className="text-xl font-bold text-white">您的专属纪念</h3>
+                      <p className="text-slate-400 text-sm">长按图片保存，或点击下方按钮分享</p>
+                  </div>
+
+                  <img src={shareImageUrl} alt="Signature Share" className="w-full rounded-lg border border-slate-700 shadow-lg mb-6" />
+                  
+                  <button 
+                    onClick={handleShareFile}
+                    className="w-full bg-yellow-500 text-black font-bold py-3 rounded-lg hover:bg-yellow-400 transition-colors flex items-center justify-center gap-2"
+                  >
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+                      </svg>
+                      分享给朋友
+                  </button>
+              </div>
+          </div>
+      )}
       
       {showInput && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-50 animate-in fade-in">

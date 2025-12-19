@@ -22,6 +22,7 @@ interface Props {
   targetPos: THREE.Vector3 | null;
   isRunning: boolean;
   onStop: (finalPos: THREE.Vector3) => void;
+  onUpdate?: (pos: THREE.Vector3) => void;
   isCelebrating: boolean;
   stairConfig: { startZ: number, slopeEndZ: number, wallZ: number, height: number };
   modelFormat: ModelFormat;
@@ -65,7 +66,7 @@ const findBoneFuzzy = (boneMap: Map<string, string>, searchName: string) => {
 
 export default function SmartCharacter({
   baseUrl, idleUrl, walkUrl, runUrl, danceUrl,
-  targetPos, isRunning, onStop, isCelebrating, stairConfig, modelFormat
+  targetPos, isRunning, onStop, onUpdate, isCelebrating, stairConfig, modelFormat
 }: Props) {
   const group = useRef<THREE.Group>(null);
   const [charState, setCharState] = useState<CharState>(CharState.IDLE);
@@ -415,6 +416,9 @@ export default function SmartCharacter({
 
     tempVec3.copy(currentPos).setY(currentPos.y + 1.5);
     camera.lookAt(tempVec3);
+    
+    // 5. Position Update Callback
+    if (onUpdate) onUpdate(currentPos);
   });
 
   // --- Interaction Handler ---
