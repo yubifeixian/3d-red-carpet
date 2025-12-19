@@ -554,7 +554,8 @@ export default function SceneContainer(props: Props) {
         
         <Suspense fallback={null}>
             <SafeEnvironment>
-                <Environment preset="night" />
+                {/* Use local EXR file instead of CDN preset */}
+                <Environment files="/model/dikhololo_night_1k.exr" background={false} />
             </SafeEnvironment>
         </Suspense>
 
