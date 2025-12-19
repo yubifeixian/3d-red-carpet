@@ -618,13 +618,13 @@ export default function SceneContainer(props: Props) {
       {showInput && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-50 animate-in fade-in">
               <div className="bg-slate-900 p-8 rounded-2xl border border-yellow-500/30 shadow-2xl shadow-yellow-500/10 max-w-md w-full text-center">
-                  <h2 className="text-2xl font-bold text-yellow-500 mb-2">Welcome to the Gala</h2>
-                  <p className="text-slate-400 mb-6">Please sign your name on the Wall of Fame.</p>
+                  <h2 className="text-2xl font-bold text-yellow-500 mb-2">欢迎来到来疯2025年终盛典</h2>
+                  <p className="text-slate-400 mb-6">请在签名墙上留下纪念</p>
                   <input 
                     type="text" 
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
-                    placeholder="Your Name (English)..." 
+                    placeholder="输入您的签名" 
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-yellow-500 mb-6 text-lg text-center font-sans"
                     maxLength={15}
                     onKeyDown={(e) => e.key === 'Enter' && submitSignature()}
@@ -634,7 +634,7 @@ export default function SceneContainer(props: Props) {
                     onClick={submitSignature}
                     className="w-full bg-gradient-to-r from-yellow-600 to-yellow-500 text-black font-bold py-3 rounded-lg hover:brightness-110 transition-all transform active:scale-95"
                   >
-                      Sign & Celebrate
+                      签名&开启盛典
                   </button>
               </div>
           </div>
